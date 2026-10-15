@@ -1,10 +1,11 @@
 
-name: Build Ramadan Al Kharaz V19.2 APK
+name: Build Ramadan Al Kharaz V19.2.1 APK
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - 'Ramadan_Al_Kharaz_V19_2_1_Compile_Fix.zip'
       - '.github/workflows/build-v19.yml'
@@ -27,8 +28,8 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Extract V19.2 source
-        run: unzip -q Ramadan_Al_Kharaz_V19_2_A4_Print_Fix.zip -d extracted
+      - name: Extract V19.2.1 project
+        run: unzip -q Ramadan_Al_Kharaz_V19_2_1_Compile_Fix.zip -d extracted
 
       - name: Build debug APK
         working-directory: extracted/Ramadan_Al_Kharaz_V18
@@ -37,7 +38,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Ramadan-Al-Kharaz-V19-2-APK
+          name: Ramadan-Al-Kharaz-V19-2-1-APK
           path: extracted/Ramadan_Al_Kharaz_V18/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
   
