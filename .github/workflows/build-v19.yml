@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Ramadan_Al_Kharaz_V19_2_A4_Print_Fix.zip'
+      - 'Ramadan_Al_Kharaz_V19_2_1_Compile_Fix.zip'
       - '.github/workflows/build-v19.yml'
 
 jobs:
