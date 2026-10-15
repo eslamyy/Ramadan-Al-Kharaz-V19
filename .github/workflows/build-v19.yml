@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - 'Ramadan_Al_Kharaz_V19_Invoice_Logo_Stamp.zip'
+      - 'Ramadan_Al_Kharaz_V19_1_PDF_Fix.zip.zip'
       - '.github/workflows/build-v19.yml'
 
 jobs:
