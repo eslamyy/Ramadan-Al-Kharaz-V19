@@ -7,7 +7,7 @@ on:
     branches:
       - main
     paths:
-      - 'Ramadan_Al_Kharaz_V19_3_Firebase.zip'
+      - 'Ramadan_Al_Kharaz_V19_3_Firebase.zip.zip'
       - '.github/workflows/build-v19.yml'
 
 jobs:
@@ -31,15 +31,17 @@ jobs:
 
       - name: Extract V19.3 project
         run: |
-          unzip -q Ramadan_Al_Kharaz_V19_3_Firebase.zip -d extracted
+          unzip -q Ramadan_Al_Kharaz_V19_3_Firebase.zip.zip -d extracted
 
       - name: Locate Android project
         run: |
           PROJECT_FILE=$(find extracted -type f -path '*/app/build.gradle' | head -n 1)
+
           if [ -z "$PROJECT_FILE" ]; then
             echo "ERROR: Android project not found"
             exit 1
           fi
+
           PROJECT_DIR=$(dirname "$(dirname "$PROJECT_FILE")")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Android project: $PROJECT_DIR"
