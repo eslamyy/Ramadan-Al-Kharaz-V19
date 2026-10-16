@@ -1,5 +1,5 @@
 
-name: Build Ramadan Al Kharaz V19.2.1 APK
+name: Build Ramadan Al Kharaz V19.3 APK
 
 on:
   workflow_dispatch:
@@ -7,12 +7,13 @@ on:
     branches:
       - main
     paths:
-      - 'Ramadan_Al_Kharaz_V19_2_1_Compile_Fix.zip'
+      - 'Ramadan_Al_Kharaz_V19_3_Firebase.zip'
       - '.github/workflows/build-v19.yml'
 
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -28,17 +29,54 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Extract V19.2.1 project
-        run: unzip -q Ramadan_Al_Kharaz_V19_2_1_Compile_Fix.zip -d extracted
+      - name: Extract V19.3 project
+        run: |
+          unzip -q Ramadan_Al_Kharaz_V19_3_Firebase.zip -d extracted
+
+      - name: Locate Android project
+        run: |
+          PROJECT_FILE=$(find extracted -type f -path '*/app/build.gradle' | head -n 1)
+          if [ -z "$PROJECT_FILE" ]; then
+            echo "ERROR: Android project not found"
+            exit 1
+          fi
+          PROJECT_DIR=$(dirname "$(dirname "$PROJECT_FILE")")
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Android project: $PROJECT_DIR"
+
+      - name: Prepare debug signing key
+        run: |
+          mkdir -p "$HOME/.android"
+
+          if [ ! -f "$HOME/.android/debug.keystore" ]; then
+            keytool -genkeypair \
+              -v \
+              -keystore "$HOME/.android/debug.keystore" \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          fi
+
+      - name: Show SHA fingerprints
+        run: |
+          keytool -list -v \
+            -keystore "$HOME/.android/debug.keystore" \
+            -alias androiddebugkey \
+            -storepass android \
+            -keypass android
 
       - name: Build debug APK
-        working-directory: extracted/Ramadan_Al_Kharaz_V18
-        run: gradle :app:assembleDebug --stacktrace
+        run: |
+          cd "$PROJECT_DIR"
+          gradle :app:assembleDebug --stacktrace
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Ramadan-Al-Kharaz-V19-2-1-APK
-          path: extracted/Ramadan_Al_Kharaz_V18/app/build/outputs/apk/debug/app-debug.apk
+          name: Ramadan-Al-Kharaz-V19-3-APK
+          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
-  
