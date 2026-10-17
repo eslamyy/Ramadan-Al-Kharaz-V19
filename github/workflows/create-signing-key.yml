@@ -1,0 +1,59 @@
+
+name: Create Android Signing Key
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  create-key:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Generate signing keystore
+        env:
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          BACKUP_PASSWORD: ${{ secrets.SIGNING_BACKUP_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$KEY_PASSWORD" ] || [ -z "$BACKUP_PASSWORD" ]; then
+            echo "ERROR: Signing secrets are missing."
+            exit 1
+          fi
+
+          keytool -genkeypair \
+            -keystore ramadan-release.jks \
+            -storetype PKCS12 \
+            -storepass "$KEY_PASSWORD" \
+            -alias ramadan \
+            -keypass "$KEY_PASSWORD" \
+            -keyalg RSA \
+            -keysize 3072 \
+            -validity 10000 \
+            -dname "CN=Ramadan Al Kharaz,O=Ramadan Al Kharaz,C=LY"
+
+          openssl enc -aes-256-cbc \
+            -pbkdf2 \
+            -salt \
+            -in ramadan-release.jks \
+            -out ramadan-release.jks.enc \
+            -pass env:BACKUP_PASSWORD
+
+          keytool -list -v \
+            -keystore ramadan-release.jks \
+            -storepass "$KEY_PASSWORD" \
+            -alias ramadan \
+            | grep -E "SHA1:|SHA256:"
+
+          rm ramadan-release.jks
+
+      - name: Upload encrypted signing key
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ramadan-Encrypted-Signing-Key
+          path: ramadan-release.jks.enc
+          retention-days: 7
+          if-no-files-found: error
