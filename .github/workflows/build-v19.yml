@@ -7,8 +7,12 @@ on:
     branches:
       - main
     paths:
-      - 'Ramadan_Al_Kharaz_V19_3_Firebase.zip.zip'
+      - 'Ramadan_Al_Kharaz_V19_3_Firebase.zip'
       - '.github/workflows/build-v19.yml'
+
+permissions:
+  contents: read
+  actions: read
 
 jobs:
   build:
@@ -29,56 +33,147 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Extract V19.3 project
+      - name: Locate latest successful signing-key run
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          unzip -q Ramadan_Al_Kharaz_V19_3_Firebase.zip.zip -d extracted
+          set -euo pipefail
 
-      - name: Locate Android project
+          RUN_ID=$(gh run list \
+            --workflow create-signing-key.yml \
+            --status success \
+            --limit 1 \
+            --json databaseId \
+            --jq '.[0].databaseId')
+
+          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
+            echo "ERROR: Signing-key workflow run not found."
+            exit 1
+          fi
+
+          echo "KEY_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+
+      - name: Download encrypted signing-key artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          PROJECT_FILE=$(find extracted -type f -path '*/app/build.gradle' | head -n 1)
+          set -euo pipefail
+
+          mkdir -p key-artifact
+
+          gh run download "$KEY_RUN_ID" \
+            --name Ramadan-Encrypted-Signing-Key \
+            --dir key-artifact
+
+          KEY_FILE=$(find key-artifact \
+            -type f -name 'ramadan-release.jks.enc' \
+            | head -n 1)
+
+          if [ -z "$KEY_FILE" ]; then
+            echo "ERROR: Encrypted signing key not found."
+            exit 1
+          fi
+
+          cp "$KEY_FILE" ramadan-release.jks.enc
+
+      - name: Decrypt signing key
+        env:
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+          BACKUP_PASSWORD: ${{ secrets.SIGNING_BACKUP_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          test -n "$KEY_PASSWORD"
+          test -n "$BACKUP_PASSWORD"
+
+          openssl enc -d -aes-256-cbc \
+            -pbkdf2 \
+            -in ramadan-release.jks.enc \
+            -out ramadan-release.jks \
+            -pass env:BACKUP_PASSWORD
+
+          keytool -list \
+            -keystore ramadan-release.jks \
+            -storetype PKCS12 \
+            -storepass "$KEY_PASSWORD" \
+            -alias ramadan
+
+          rm -f ramadan-release.jks.enc
+          rm -rf key-artifact
+
+      - name: Extract Android project
+        run: |
+          set -euo pipefail
+
+          unzip -q Ramadan_Al_Kharaz_V19_3_Firebase.zip \
+            -d extracted
+
+          PROJECT_FILE=$(find extracted \
+            -type f -path '*/app/build.gradle' \
+            | head -n 1)
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "ERROR: Android project not found"
+            echo "ERROR: Android project not found."
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$(dirname "$PROJECT_FILE")")
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-          echo "Android project: $PROJECT_DIR"
 
-      - name: Prepare debug signing key
+      - name: Build APK
         run: |
-          mkdir -p "$HOME/.android"
-
-          if [ ! -f "$HOME/.android/debug.keystore" ]; then
-            keytool -genkeypair \
-              -v \
-              -keystore "$HOME/.android/debug.keystore" \
-              -storepass android \
-              -alias androiddebugkey \
-              -keypass android \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -dname "CN=Android Debug,O=Android,C=US"
-          fi
-
-      - name: Show SHA fingerprints
-        run: |
-          keytool -list -v \
-            -keystore "$HOME/.android/debug.keystore" \
-            -alias androiddebugkey \
-            -storepass android \
-            -keypass android
-
-      - name: Build debug APK
-        run: |
+          set -euo pipefail
           cd "$PROJECT_DIR"
           gradle :app:assembleDebug --stacktrace
 
-      - name: Upload APK artifact
+      - name: Sign APK with persistent key
+        env:
+          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+
+          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" \
+            -mindepth 1 -maxdepth 1 -type d \
+            | sort -V | tail -n 1)
+
+          ZIPALIGN="$BUILD_TOOLS/zipalign"
+          APKSIGNER="$BUILD_TOOLS/apksigner"
+
+          INPUT_APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
+
+          test -f "$INPUT_APK"
+          test -x "$ZIPALIGN"
+          test -x "$APKSIGNER"
+
+          mkdir -p signed-output
+
+          "$ZIPALIGN" -f -p 4 \
+            "$INPUT_APK" signed-output/aligned.apk
+
+          "$APKSIGNER" sign \
+            --ks ramadan-release.jks \
+            --ks-key-alias ramadan \
+            --ks-pass env:KEY_PASSWORD \
+            --key-pass env:KEY_PASSWORD \
+            --out signed-output/Ramadan-Al-Kharaz-V19.3.apk \
+            signed-output/aligned.apk
+
+          "$APKSIGNER" verify --verbose \
+            signed-output/Ramadan-Al-Kharaz-V19.3.apk
+
+          keytool -list -v \
+            -keystore ramadan-release.jks \
+            -storetype PKCS12 \
+            -storepass "$KEY_PASSWORD" \
+            -alias ramadan \
+            | grep -E 'SHA1:|SHA256:'
+
+          rm -f ramadan-release.jks signed-output/aligned.apk
+
+      - name: Upload signed APK
         uses: actions/upload-artifact@v4
         with:
-          name: Ramadan-Al-Kharaz-V19-3-APK
-          path: ${{ env.PROJECT_DIR }}/app/build/outputs/apk/debug/app-debug.apk
+          name: Ramadan-Al-Kharaz-V19-3-Signed-APK
+          path: signed-output/Ramadan-Al-Kharaz-V19.3.apk
           if-no-files-found: error
+          retention-days: 30
