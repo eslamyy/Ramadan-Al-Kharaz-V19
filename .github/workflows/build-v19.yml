@@ -7,7 +7,7 @@ on:
     branches:
       - main
     paths:
-      - 'Ramadan_Al_Kharaz_V19_3_Firebase.zip'
+      - 'Ramadan_Al_Kharaz_V19_3_Firebase_Restore_Fix.zip'
       - '.github/workflows/build-v19.yml'
 
 permissions:
@@ -105,8 +105,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          unzip -q Ramadan_Al_Kharaz_V19_3_Firebase.zip \
-            -d extracted
+          PROJECT_ZIP="Ramadan_Al_Kharaz_V19_3_Firebase_Restore_Fix.zip"
+
+          if [ ! -f "$PROJECT_ZIP" ]; then
+            echo "ERROR: Project ZIP not found: $PROJECT_ZIP"
+            echo "Available ZIP files:"
+            find . -maxdepth 2 -type f -name '*.zip'
+            exit 1
+          fi
+
+          unzip -q "$PROJECT_ZIP" -d extracted
 
           PROJECT_FILE=$(find extracted \
             -type f -path '*/app/build.gradle' \
