@@ -7,7 +7,7 @@ on:
     branches:
       - main
     paths:
-      - 'Ramadan_Al_Kharaz_V19_3_Firebase_Restore_Fix.zip'
+      - 'Ramadan_Al_Kharaz_V19_3_FileChooser_Fix.zip'
       - '.github/workflows/build-v19.yml'
 
 permissions:
@@ -105,7 +105,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          PROJECT_ZIP="Ramadan_Al_Kharaz_V19_3_Firebase_Restore_Fix.zip"
+          PROJECT_ZIP="Ramadan_Al_Kharaz_V19_3_FileChooser_Fix.zip"
 
           if [ ! -f "$PROJECT_ZIP" ]; then
             echo "ERROR: Project ZIP not found: $PROJECT_ZIP"
