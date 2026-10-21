@@ -33,7 +33,7 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Locate latest successful signing-key run
+      - name: Locate signing-key run
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -47,13 +47,13 @@ jobs:
             --jq '.[0].databaseId')
 
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
-            echo "ERROR: Signing-key workflow run not found."
+            echo "Signing key not found"
             exit 1
           fi
 
           echo "KEY_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
 
-      - name: Download encrypted signing-key artifact
+      - name: Download signing key
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -69,10 +69,7 @@ jobs:
             -type f -name 'ramadan-release.jks.enc' \
             | head -n 1)
 
-          if [ -z "$KEY_FILE" ]; then
-            echo "ERROR: Encrypted signing key not found."
-            exit 1
-          fi
+          test -n "$KEY_FILE"
 
           cp "$KEY_FILE" ramadan-release.jks.enc
 
@@ -108,9 +105,7 @@ jobs:
           PROJECT_ZIP="Ramadan_Al_Kharaz_V19_3_FileChooser_Fix.zip"
 
           if [ ! -f "$PROJECT_ZIP" ]; then
-            echo "ERROR: Project ZIP not found: $PROJECT_ZIP"
-            echo "Available ZIP files:"
-            find . -maxdepth 2 -type f -name '*.zip'
+            echo "ERROR: Project ZIP not found"
             exit 1
           fi
 
@@ -121,20 +116,23 @@ jobs:
             | head -n 1)
 
           if [ -z "$PROJECT_FILE" ]; then
-            echo "ERROR: Android project not found."
+            echo "ERROR: Android project not found"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$(dirname "$PROJECT_FILE")")
+
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
       - name: Build APK
         run: |
           set -euo pipefail
+
           cd "$PROJECT_DIR"
+
           gradle :app:assembleDebug --stacktrace
 
-      - name: Sign APK with persistent key
+      - name: Sign APK
         env:
           KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
@@ -150,8 +148,6 @@ jobs:
           INPUT_APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
 
           test -f "$INPUT_APK"
-          test -x "$ZIPALIGN"
-          test -x "$APKSIGNER"
 
           mkdir -p signed-output
 
@@ -168,13 +164,6 @@ jobs:
 
           "$APKSIGNER" verify --verbose \
             signed-output/Ramadan-Al-Kharaz-V19.3.apk
-
-          keytool -list -v \
-            -keystore ramadan-release.jks \
-            -storetype PKCS12 \
-            -storepass "$KEY_PASSWORD" \
-            -alias ramadan \
-            | grep -E 'SHA1:|SHA256:'
 
           rm -f ramadan-release.jks signed-output/aligned.apk
 
