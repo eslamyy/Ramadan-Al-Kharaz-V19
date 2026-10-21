@@ -7,7 +7,7 @@ on:
     branches:
       - main
     paths:
-      - 'Ramadan_Al_Kharaz_V19_3_FileChooser_Fix.zip'
+      - 'Ramadan_Al_Kharaz_V19_3_Print_BW_Fix.zip'
       - '.github/workflows/build-v19.yml'
 
 permissions:
@@ -33,7 +33,7 @@ jobs:
         with:
           gradle-version: '8.11.1'
 
-      - name: Locate signing-key run
+      - name: Locate latest successful signing-key run
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -47,13 +47,13 @@ jobs:
             --jq '.[0].databaseId')
 
           if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
-            echo "Signing key not found"
+            echo "ERROR: Signing-key run not found"
             exit 1
           fi
 
           echo "KEY_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
 
-      - name: Download signing key
+      - name: Download encrypted signing key
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -102,7 +102,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          PROJECT_ZIP="Ramadan_Al_Kharaz_V19_3_FileChooser_Fix.zip"
+          PROJECT_ZIP="Ramadan_Al_Kharaz_V19_3_Print_BW_Fix.zip"
 
           if [ ! -f "$PROJECT_ZIP" ]; then
             echo "ERROR: Project ZIP not found"
@@ -132,7 +132,7 @@ jobs:
 
           gradle :app:assembleDebug --stacktrace
 
-      - name: Sign APK
+      - name: Align and sign APK
         env:
           KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
