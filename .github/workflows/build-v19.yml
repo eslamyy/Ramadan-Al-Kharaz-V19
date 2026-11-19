@@ -1,176 +1,55 @@
 
-name: Build Ramadan Al Kharaz V19.3 APK
+name: Build Ramadan Al Kharaz APK
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - 'Ramadan_Al_Kharaz_V19_3_Print_BW_Fix.zip'
-      - '.github/workflows/build-v19.yml'
-
-permissions:
-  contents: read
-  actions: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
+      - name: Checkout project
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Install Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Gradle
+      - name: Install Gradle
         uses: gradle/actions/setup-gradle@v4
-        with:
-          gradle-version: '8.11.1'
 
-      - name: Locate latest successful signing-key run
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Find and build Android project
+        shell: bash
         run: |
-          set -euo pipefail
+          set -e
+          PROJECT=$(find . -type f -name settings.gradle \
+            -not -path '*/.gradle/*' \
+            -print -quit)
 
-          RUN_ID=$(gh run list \
-            --workflow create-signing-key.yml \
-            --status success \
-            --limit 1 \
-            --json databaseId \
-            --jq '.[0].databaseId')
-
-          if [ -z "$RUN_ID" ] || [ "$RUN_ID" = "null" ]; then
-            echo "ERROR: Signing-key run not found"
+          if [ -z "$PROJECT" ]; then
+            echo "Android project not found."
             exit 1
           fi
 
-          echo "KEY_RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          cd "$(dirname "$PROJECT")"
 
-      - name: Download encrypted signing key
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-
-          mkdir -p key-artifact
-
-          gh run download "$KEY_RUN_ID" \
-            --name Ramadan-Encrypted-Signing-Key \
-            --dir key-artifact
-
-          KEY_FILE=$(find key-artifact \
-            -type f -name 'ramadan-release.jks.enc' \
-            | head -n 1)
-
-          test -n "$KEY_FILE"
-
-          cp "$KEY_FILE" ramadan-release.jks.enc
-
-      - name: Decrypt signing key
-        env:
-          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-          BACKUP_PASSWORD: ${{ secrets.SIGNING_BACKUP_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          test -n "$KEY_PASSWORD"
-          test -n "$BACKUP_PASSWORD"
-
-          openssl enc -d -aes-256-cbc \
-            -pbkdf2 \
-            -in ramadan-release.jks.enc \
-            -out ramadan-release.jks \
-            -pass env:BACKUP_PASSWORD
-
-          keytool -list \
-            -keystore ramadan-release.jks \
-            -storetype PKCS12 \
-            -storepass "$KEY_PASSWORD" \
-            -alias ramadan
-
-          rm -f ramadan-release.jks.enc
-          rm -rf key-artifact
-
-      - name: Extract Android project
-        run: |
-          set -euo pipefail
-
-          PROJECT_ZIP="Ramadan_Al_Kharaz_V19_3_Print_BW_Fix.zip"
-
-          if [ ! -f "$PROJECT_ZIP" ]; then
-            echo "ERROR: Project ZIP not found"
-            exit 1
+          if [ -f gradlew ]; then
+            chmod +x gradlew
+            ./gradlew :app:assembleDebug
+          else
+            gradle :app:assembleDebug
           fi
 
-          unzip -q "$PROJECT_ZIP" -d extracted
+          mkdir -p "$GITHUB_WORKSPACE/apk-output"
+          find app/build/outputs/apk -name '*.apk' \
+            -exec cp {} "$GITHUB_WORKSPACE/apk-output/" \;
 
-          PROJECT_FILE=$(find extracted \
-            -type f -path '*/app/build.gradle' \
-            | head -n 1)
-
-          if [ -z "$PROJECT_FILE" ]; then
-            echo "ERROR: Android project not found"
-            exit 1
-          fi
-
-          PROJECT_DIR=$(dirname "$(dirname "$PROJECT_FILE")")
-
-          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
-
-      - name: Build APK
-        run: |
-          set -euo pipefail
-
-          cd "$PROJECT_DIR"
-
-          gradle :app:assembleDebug --stacktrace
-
-      - name: Align and sign APK
-        env:
-          KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-
-          BUILD_TOOLS=$(find "$ANDROID_HOME/build-tools" \
-            -mindepth 1 -maxdepth 1 -type d \
-            | sort -V | tail -n 1)
-
-          ZIPALIGN="$BUILD_TOOLS/zipalign"
-          APKSIGNER="$BUILD_TOOLS/apksigner"
-
-          INPUT_APK="$PROJECT_DIR/app/build/outputs/apk/debug/app-debug.apk"
-
-          test -f "$INPUT_APK"
-
-          mkdir -p signed-output
-
-          "$ZIPALIGN" -f -p 4 \
-            "$INPUT_APK" signed-output/aligned.apk
-
-          "$APKSIGNER" sign \
-            --ks ramadan-release.jks \
-            --ks-key-alias ramadan \
-            --ks-pass env:KEY_PASSWORD \
-            --key-pass env:KEY_PASSWORD \
-            --out signed-output/Ramadan-Al-Kharaz-V19.3.apk \
-            signed-output/aligned.apk
-
-          "$APKSIGNER" verify --verbose \
-            signed-output/Ramadan-Al-Kharaz-V19.3.apk
-
-          rm -f ramadan-release.jks signed-output/aligned.apk
-
-      - name: Upload signed APK
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Ramadan-Al-Kharaz-V19-3-Signed-APK
-          path: signed-output/Ramadan-Al-Kharaz-V19.3.apk
+          name: Ramadan-Al-Kharaz-APK
+          path: apk-output/*.apk
           if-no-files-found: error
-          retention-days: 30
